@@ -102,6 +102,7 @@ inline size_t GetRNNWorkspaceSize(int seq_length,
       size = (seq_length + 1) * batch_size * hidden_size * 4 + batch_size * hidden_size;
       break;
     case rnn_enum::kGru:
+	  size = seq_length * batch_size * hidden_size * 4 + batch_size * hidden_size * 6;
       break;
   }
   return size;
@@ -121,6 +122,8 @@ inline size_t GetRNNReserveSpaceSize(int seq_length,
       size = seq_length * batch_size * hidden_size * 6;
       break;
     case rnn_enum::kGru:
+	  size = seq_length * batch_size * hidden_size * 5 + 
+		batch_size * hidden_size * 7 + 2 * seq_length * batch_size * 3 * hidden_size;
       break;
   }
   return size;
@@ -222,6 +225,8 @@ void RNNForwardInference(DType* ws,
                                   w_ptr, y_ptr, hy_ptr, cy_ptr);
       break;
     case rnn_enum::kGru:
+	  GruForwardInference<DType>(ws, state_outputs, num_layers, direction, seq_length,
+                              batch_size, input_size, state_size, x_ptr, hx_ptr, w_ptr, y_ptr, hy_ptr);
       break;
   }
 }
@@ -275,7 +280,8 @@ class RNNOp {
                const std::vector<TBlob> &out_data) {
     using namespace mshadow;
     using namespace mshadow::expr;
-    CHECK_EQ(param_.mode, rnn_enum::kLstm) << "Only lstm mode is supported at the moment.";
+    CHECK(param_.mode == rnn_enum::kLstm || param_.mode == rnn_enum::kGru) 
+		<< "Only lstm/gru mode is supported at the moment.";
     if (param_.bidirectional || param_.num_layers != 1) {
       LOG(FATAL) << "Only single layer and undirectional is supported at the moment";
     }

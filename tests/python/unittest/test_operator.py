@@ -27,6 +27,92 @@ from mxnet.test_utils import *
 from common import setup_module, with_seed
 import unittest
 
+def test_gru():
+    X = mx.sym.Variable('x')
+    Params = mx.sym.Variable('params')
+    HX = mx.sym.Variable('state') 
+ 
+    T, N, I, H = 5, 32, 200, 200 
+
+    nd = 1
+    nl = 1
+    if nd == 1:
+        bidirection = False
+    else:
+        bidirection = True
+
+    xpu = mx.cpu()
+
+    x = mx.random.uniform(-1, 1, (T, N, I), ctx=xpu)
+    dy = mx.random.uniform(-1, 1, (T, N, H), ctx=xpu)
+    dhy = mx.random.uniform(-1, 1, (nl, N, H), ctx=xpu)
+
+    wx = mx.random.uniform(-1, 1, (3 * H * I,), ctx=xpu)
+    wh = mx.random.uniform(-1, 1, (3 * H * H,), ctx=xpu)
+    bx = mx.random.uniform(-1, 1, (3 * H,), ctx=xpu)
+    bh = mx.random.uniform(-1, 1, (3 * H,), ctx=xpu)
+
+    params = mx.nd.concat(wx,wh,bx,bh, dim=0)
+
+    h0 = mx.nd.zeros((nl, N, H), ctx=xpu)
+
+    x.attach_grad()
+    params.attach_grad()
+    wx.attach_grad()
+    wh.attach_grad()
+    bx.attach_grad()
+    bh.attach_grad()
+
+    params2 = params.copy()
+    params2.attach_grad()
+ 
+    #GRUCell case
+    cell = mx.rnn.GRUCell(H, params=None) 
+    Y, [HY] = cell.unroll(T, X, layout='TNC', merge_outputs=True)
+    G = mx.symbol.Group([Y, HY])
+
+    exe = G.bind(
+        xpu, 
+        args={
+            'x':x, 
+            'gru_i2h_weight':wx, 
+            'gru_h2h_weight':wh, 
+            'gru_i2h_bias':bx, 
+            'gru_h2h_bias':bh,
+        }
+        ,
+        args_grad={
+            'x':x.grad, 
+            'gru_i2h_weight':wx.grad, 
+            'gru_h2h_weight':wh.grad,
+            'gru_i2h_bias':bx.grad, 
+            'gru_h2h_bias':bh.grad
+        }
+        ,
+        grad_req='write'
+    )
+
+    fwd1 = exe.forward(is_train=False)
+
+    x.detach()
+    x.attach_grad()
+
+    #IntelRNN
+
+    Y = mx.sym.RNN(data=X, parameters=Params, state=HX, state_size=H, num_layers=nl,
+                    bidirectional=bidirection, mode='gru', state_outputs = True, name='GRU')
+
+    yexe = Y.bind(xpu, 
+            args={'x':x, 'params':params2, 'state':h0},
+            args_grad={'x':x.grad, 'params':params2.grad})
+
+    fwd2 = yexe.forward(is_train=False)
+
+    # check forward:y, hy
+    assert_allclose(fwd1[0].asnumpy(), fwd2[0].asnumpy(), rtol=1e-2, atol=1e-4)
+    assert_allclose(fwd1[1].asnumpy(), fwd2[1][0].asnumpy(), rtol=1e-2, atol=1e-4)
+
+
 def test_lstm():
     X = mx.sym.Variable('x')
     Params = mx.sym.Variable('params')

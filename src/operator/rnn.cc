@@ -182,7 +182,14 @@ NNVM_REGISTER_OP(RNN)
 .describe(R"code(Applies a recurrent layer to input
 )code" ADD_FILELINE)
 .set_attr_parser(ParamParser<RNNParam>)
-.set_num_inputs(4)
+.set_num_inputs([](const NodeAttrs& attrs) {
+    const RNNParam& params = nnvm::get<RNNParam>(attrs.parsed);
+    int num_inputs = 3;
+    if (params.mode == rnn_enum::kLstm) {
+      num_inputs = 4;
+    }    
+    return num_inputs; 
+})
 .set_num_outputs([](const NodeAttrs& attrs) {
     return NumVisibleOutputs(attrs) + 1;
 })
@@ -212,7 +219,14 @@ NNVM_REGISTER_OP(RNN)
 .add_arguments(RNNParam::__FIELDS__());
 
 NNVM_REGISTER_OP(_backward_RNN)
-.set_num_outputs(4)
+.set_num_outputs([](const NodeAttrs& attrs) {
+    const RNNParam& params = nnvm::get<RNNParam>(attrs.parsed);
+    int num_outputs = 3;
+    if (params.mode == rnn_enum::kLstm) {
+      num_outputs = 4;
+    }    
+    return num_outputs; 
+})
 .set_attr_parser(ParamParser<RNNParam>)
 .set_attr<nnvm::TIsBackward>("TIsBackward", true)
 .set_attr<FInferStorageType>("FInferStorageType", BackwardRNNStorageType)
