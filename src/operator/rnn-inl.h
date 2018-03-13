@@ -193,6 +193,8 @@ void RNNForwardTraining(DType* ws,
                                  w_ptr, y_ptr, hy_ptr, cy_ptr);
       break;
     case rnn_enum::kGru:
+	  GruForwardTraining<DType>(rs, state_outputs, num_layers, direction, seq_length,
+                              batch_size, input_size, state_size, x_ptr, hx_ptr, w_ptr, y_ptr, hy_ptr);
       break;
   }
 }
@@ -264,6 +266,10 @@ void RNNBackward(DType* ws,
                           dy_ptr, dhy_ptr, dcy_ptr, dx_ptr, dhx_ptr, dcx_ptr, dw_ptr);
       break;
     case rnn_enum::kGru:
+	  GruBackward<DType>(rs, num_layers, direction, seq_length, batch_size,
+                          input_size, state_size, x_ptr, hx_ptr, w_ptr,
+                          dy_ptr, dhy_ptr, dx_ptr, dhx_ptr, dw_ptr);
+
       break;
   }
 }
@@ -328,8 +334,8 @@ class RNNOp {
         .get_space_typed<cpu, 1, DType>(Shape1(workspace_size), s);
     int direction = param_.bidirectional ? 2 : 1;
 
-    if (ctx.is_train) {
-      DType* reserve_space_ptr = out_data[out_expected - 1].dptr<DType>();
+    if (ctx.is_train) {	  
+      DType* reserve_space_ptr = out_data[out_expected - 1].dptr<DType>();	  
       RNNForwardTraining<DType>(workspace.dptr_,
                                 reserve_space_ptr,
                                 param_.state_outputs,
@@ -347,6 +353,7 @@ class RNNOp {
                                 hy_ptr,
                                 cy_ptr,
                                 param_.mode);
+		
     } else {
       RNNForwardInference<DType>(workspace.dptr_,
                                  param_.state_outputs,
@@ -375,7 +382,8 @@ class RNNOp {
                 const std::vector<TBlob> &in_grad) {
     using namespace mshadow;
     using namespace mshadow::expr;
-    CHECK_EQ(param_.mode, rnn_enum::kLstm) << "Only lstm mode is supported at the moment.";
+    CHECK(param_.mode == rnn_enum::kLstm || param_.mode == rnn_enum::kGru) 
+		<< "Only lstm/gru mode is supported at the moment.";
     if (param_.bidirectional || param_.num_layers != 1) {
       LOG(FATAL) << "Only single layer and undirectional is supported at the moment";
     }

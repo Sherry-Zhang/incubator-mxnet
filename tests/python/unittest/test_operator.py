@@ -30,30 +30,30 @@ import unittest
 def test_gru():
     X = mx.sym.Variable('x')
     Params = mx.sym.Variable('params')
-    HX = mx.sym.Variable('state') 
- 
-    T, N, I, H = 5, 32, 200, 200 
+    HX = mx.sym.Variable('state')
+
+    # params
+    T, N, I, H = 5, 32, 100, 100
+
 
     nd = 1
-    nl = 1
     if nd == 1:
         bidirection = False
     else:
         bidirection = True
-
+    nl = 1
     xpu = mx.cpu()
 
     x = mx.random.uniform(-1, 1, (T, N, I), ctx=xpu)
     dy = mx.random.uniform(-1, 1, (T, N, H), ctx=xpu)
     dhy = mx.random.uniform(-1, 1, (nl, N, H), ctx=xpu)
 
-    wx = mx.random.uniform(-1, 1, (3 * H * I,), ctx=xpu)
-    wh = mx.random.uniform(-1, 1, (3 * H * H,), ctx=xpu)
-    bx = mx.random.uniform(-1, 1, (3 * H,), ctx=xpu)
-    bh = mx.random.uniform(-1, 1, (3 * H,), ctx=xpu)
-
-    params = mx.nd.concat(wx,wh,bx,bh, dim=0)
-
+    params = mx.random.uniform(-1, 1, (3 * H * (I + H + 2),), ctx=xpu)
+    wx = params[:3 * H * I].reshape((3 * H, I))
+    wh = params[3 * H * I: 3 * H * (I + H)].reshape((3 * H, H))
+    bx = params[3 * H * (I + H):3 * H * (I + H + 1)].reshape((3 * H,))
+    bh = params[3 * H * (I + H + 1):].reshape((3 * H,))
+   
     h0 = mx.nd.zeros((nl, N, H), ctx=xpu)
 
     x.attach_grad()
@@ -65,7 +65,7 @@ def test_gru():
 
     params2 = params.copy()
     params2.attach_grad()
- 
+
     #GRUCell case
     cell = mx.rnn.GRUCell(H, params=None) 
     Y, [HY] = cell.unroll(T, X, layout='TNC', merge_outputs=True)
@@ -92,26 +92,44 @@ def test_gru():
         grad_req='write'
     )
 
-    fwd1 = exe.forward(is_train=False)
+    fwd1 = exe.forward(is_train=True)
+
+    exe.backward([dy, dhy.reshape([N, H])], is_train=True)
+
+    bwd_dx1 = x.grad
+    bwd_dw1 = mx.ndarray.concat(wx.grad.reshape((3*H*I,)),
+                                wh.grad.reshape((3*H*H,)),
+                                bx.grad,
+                                bh.grad,
+                                dim=0)
 
     x.detach()
     x.attach_grad()
 
     #IntelRNN
 
-    Y = mx.sym.RNN(data=X, parameters=Params, state=HX, state_size=H, num_layers=nl,
-                    bidirectional=bidirection, mode='gru', state_outputs = True, name='GRU')
+    Y = mx.sym.RNN(data=X, parameters=Params, state=HX, 
+                   state_size=H, num_layers=nl, bidirectional=bidirection, mode='gru', state_outputs = True, name='GRU')
 
     yexe = Y.bind(xpu, 
             args={'x':x, 'params':params2, 'state':h0},
             args_grad={'x':x.grad, 'params':params2.grad})
 
-    fwd2 = yexe.forward(is_train=False)
+    fwd2 = yexe.forward(is_train=True)
+
+    yexe.backward([dy, dhy],is_train=True)
+    bwd_dx2 = x.grad
+    bwd_dw2 = params2.grad
 
     # check forward:y, hy
     assert_allclose(fwd1[0].asnumpy(), fwd2[0].asnumpy(), rtol=1e-2, atol=1e-4)
     assert_allclose(fwd1[1].asnumpy(), fwd2[1][0].asnumpy(), rtol=1e-2, atol=1e-4)
 
+    # check backward: dx
+    assert_allclose(bwd_dx1.asnumpy(), bwd_dx2.asnumpy(), rtol=1e-2, atol=1e-4)
+
+    # check backward: dwx, dwh, dbx, dbh
+    assert_allclose(bwd_dw1.asnumpy(), bwd_dw2.asnumpy(), rtol=1e-2, atol=1e-4)
 
 def test_lstm():
     X = mx.sym.Variable('x')
