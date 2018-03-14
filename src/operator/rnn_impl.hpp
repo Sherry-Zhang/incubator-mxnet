@@ -331,12 +331,11 @@ void GruForwardInferenceSingleLayer(DType* ws,
                                     const Tensor<cpu, 2, DType> &x,
                                     const Tensor<cpu, 2, DType> &hx,
                                     const Tensor<cpu, 2, DType> &wx,
-									const Tensor<cpu, 2, DType> &wh,
-									const Tensor<cpu, 2, DType> &bx,
-									const Tensor<cpu, 2, DType> &bh,
+                                    const Tensor<cpu, 2, DType> &wh,
+                                    const Tensor<cpu, 2, DType> &bx,
+                                    const Tensor<cpu, 2, DType> &bh,
                                     DType* y_ptr,
                                     DType* hy_ptr) {
-
   #pragma omp parallel for collapse(2)
   for (int i = 0; i < N; i++)
       for (int j = 0; j < H; j++) {
@@ -350,12 +349,9 @@ void GruForwardInferenceSingleLayer(DType* ws,
   DType* rt = gemmC2 + N * 3 * H;
   DType* zt = rt + N * H;
   DType* nt = zt + N * H;  
-  DType* gemmC1_t = gemmC1;
-
-  
+  DType* gemmC1_t = gemmC1;  
   Tensor<cpu, 2, DType> dgemmC1(ws, Shape2(D * T * N, 3 * H));
   Tensor<cpu, 2, DType> dgemmC2(gemmC2, Shape2(D * N, 3 * H));
-
 
   //x * wx.T : [T * N, I] * [I, 3 * H]  
   DType alpha = 1.0;
@@ -366,9 +362,7 @@ void GruForwardInferenceSingleLayer(DType* ws,
       //  perform the first direction, X * wx and H * wh for each step
       //  ht-1 * wh, ht-1:[N, H] wh:[3 * H, H]      
 	  Tensor<cpu, 2, DType> dht_1(ht_1, Shape2(N, D * H)); 
-
       linalg_gemm(dht_1, wh, dgemmC2, alpha, beta, false, true);
-
       gemmC1_t = gemmC1 + t * N * 3 * H;
         
       #pragma omp parallel for collapse(2)
@@ -376,8 +370,7 @@ void GruForwardInferenceSingleLayer(DType* ws,
           for (int j = 0; j < H; ++j) {                
               int rtb = i * 3 * H;
               int ztb = i * 3 * H + H;
-              int ntb = i * 3 * H + 2 * H;
-			  
+              int ntb = i * 3 * H + 2 * H;			  
               rt[i * H + j] = sigmoid(gemmC1_t[rtb + j] + gemmC2[rtb + j]
                   + bx[0][j] + bh[0][j]);
               zt[i * H + j] = sigmoid(gemmC1_t[ztb + j] + gemmC2[ztb + j]
@@ -387,8 +380,7 @@ void GruForwardInferenceSingleLayer(DType* ws,
               ht[i * D * H + j] = (1-zt[i * H + j]) * nt[i * H + j] +
                     zt[i * H + j] * ht_1[i * D * H + j];
           }
-      }        
-
+      }
       ht_1 = ht;
       ht = ht + D * H * N;
   }    
@@ -400,10 +392,8 @@ void GruForwardInferenceSingleLayer(DType* ws,
       for (int i = 0; i < N; i++)
           for (int j = 0; j < H; j++) {
               hy_ptr[i * H + j] = y_start[i * H + j];
-          }
-  
+          }  
   }
-
 }
 
 template <typename DType>
@@ -420,34 +410,37 @@ void GruForwardInference(DType* ws,
                          DType* w_ptr,
                          DType* y_ptr,
                          DType* hy_ptr) {
-
   const Tensor<cpu, 2, DType> wx(w_ptr, Shape2(H * 3, I));
   const Tensor<cpu, 2, DType> wh(w_ptr + I * H * 3, Shape2(H * 3, H));
   const Tensor<cpu, 2, DType> bx(wh.dptr_ + H * H * 3, Shape2(3, H));
   const Tensor<cpu, 2, DType> bh(bx.dptr_ + H * 3, Shape2(3, H));  
-   
 
-  Tensor<cpu, 2, DType> x(x_ptr, Shape2(T * N, I));
-  Tensor<cpu, 3, DType> hx(hx_ptr, Shape3(L, N, H));
-  Tensor<cpu, 3, DType> hy(hy_ptr, Shape3(L, N, H));
-
-  Tensor<cpu, 2, DType> x_l = x;
-  Tensor<cpu, 2, DType> hx_l = hx[0];
-  
   DType* y_tmp = ws;
-  DType* hy_l = hy_ptr;  
-  DType* y_l = y_ptr;
+  DType* y_l = x_ptr;
   DType* ws2 = y_tmp + D * T * N * H;
 
   const Tensor<cpu, 2, DType> wx_l = wx;
   const Tensor<cpu, 2, DType> wh_l = wh;
   const Tensor<cpu, 2, DType> bx_l = bx;
   const Tensor<cpu, 2, DType> bh_l = bh;
+  Tensor<cpu, 2, DType> x(x_ptr, Shape2(T * N, I));
+  Tensor<cpu, 3, DType> hx(hx_ptr, Shape3(L, N, H));
+  Tensor<cpu, 3, DType> hy(hy_ptr, Shape3(L, N, H));
+  Tensor<cpu, 2, DType> x_l = x;
+  Tensor<cpu, 2, DType> hx_l = hx[0];    
+  DType* hy_l = hy_ptr;  
+  
+  for (int i = 0; i < T * N; i++)
+      for (int j = 0; j < I; j++) {
+	      x_l[i][j] = y_l[i * I + j];
+      }
 
+  y_l = y_ptr;
 
   GruForwardInferenceSingleLayer<DType>(ws2, state_outputs, D, T, N, I, H,
                                          x_l, hx_l, wx_l, wh_l, bx_l, bh_l, y_l, hy_l);
-  
+
+ 
 }
 
 
@@ -462,10 +455,10 @@ void GruForwardTrainingSingleLayer(DType* ws,
                                    const Tensor<cpu, 2, DType> &x,
                                    const Tensor<cpu, 2, DType> &hx,
                                    const Tensor<cpu, 2, DType> &wx,
-								   const Tensor<cpu, 2, DType> &wh,
-								   const Tensor<cpu, 2, DType> &bx,
-								   const Tensor<cpu, 2, DType> &bh,
-								   DType* gateR,
+                                   const Tensor<cpu, 2, DType> &wh,
+                                   const Tensor<cpu, 2, DType> &bx,
+                                   const Tensor<cpu, 2, DType> &bh,
+                                   DType* gateR,
                                    DType* gateZ,
                                    DType* gateN,
                                    DType* Mnh,
@@ -473,15 +466,13 @@ void GruForwardTrainingSingleLayer(DType* ws,
                                    DType* hy_ptr) {   
 
   DType* ht = y_ptr;
-  DType* ht_1 = y_ptr;  
-
+  DType* ht_1 = y_ptr; 
   DType* gemmC1  = ws;              // [D, T, N, 3 * H]                
   DType* gemmC2  = gemmC1 + D * T * N * 3 * H;  // N * 3 * H  
   DType* rt = gateR;
   DType* zt = gateZ;
   DType* nt = gateN;  
-  DType* gemmC1_t = gemmC1;
-  
+  DType* gemmC1_t = gemmC1;  
   Tensor<cpu, 2, DType> dgemmC1(ws, Shape2(D * T * N, 3 * H));
   Tensor<cpu, 2, DType> dgemmC2(gemmC2, Shape2(D * N, 3 * H));
     
@@ -501,9 +492,7 @@ void GruForwardTrainingSingleLayer(DType* ws,
       //  ht-1 * wh, ht-1:[N, H] wh:[3 * H, H]
       
 	  Tensor<cpu, 2, DType> dht_1(ht_1, Shape2(N, D * H)); 
-
       linalg_gemm(dht_1, wh, dgemmC2, alpha, beta, false, true);
-
       gemmC1_t = gemmC1 + t * N * 3 * H;
                
       rt = gateR + t * N * H;
@@ -527,13 +516,10 @@ void GruForwardTrainingSingleLayer(DType* ws,
                   rt[i * H + j] * (gemmC2[ntb + j] + bh[2][j]));
               ht[i * D * H + j] = (1-zt[i * H + j]) * nt[i * H + j] +
                     zt[i * H + j] * ht_1[i * D * H + j];
-
             }
         }        
-
       ht_1 = ht;
       ht = ht + D * H * N;
-       
   }
   //  copy last state to hy, from(N, H * D) to (D, N, H)
   if (state_outputs) {        
@@ -566,15 +552,12 @@ void GruForwardTraining(DType* ws,
   const Tensor<cpu, 2, DType> wh(w_ptr + I * H * 3, Shape2(H * 3, H));
   const Tensor<cpu, 2, DType> bx(wh.dptr_ + H * H * 3, Shape2(3, H));
   const Tensor<cpu, 2, DType> bh(bx.dptr_ + H * 3, Shape2(3, H));  
-
   Tensor<cpu, 2, DType> x(x_ptr, Shape2(T * N, I));
   Tensor<cpu, 3, DType> hx(hx_ptr, Shape3(L, N, H));
   Tensor<cpu, 3, DType> hy(hy_ptr, Shape3(L, N, H));
-
   Tensor<cpu, 2, DType> x_l = x;
   Tensor<cpu, 2, DType> hx_l = hx[0];
   DType* hy_l = hy_ptr;
-
   DType* gateR_l = ws;
   DType* gateZ_l = gateR_l + L * T * D * N * H;
   DType* gateN_l = gateZ_l + L * T * D * N * H;
@@ -610,16 +593,16 @@ void GruBackwardSingleLayer(DType* ws,
                             DType* y_ptr,
                             DType* dy_ptr,  
                             DType* dhy_ptr,
-							DType* gateR, 
+                            DType* gateR, 
                             DType* gateZ, 
                             DType* gateN, 
                             DType* Mnh,                            
-							DType* dx,
-							DType* dhx,
+                            DType* dx,
+                            DType* dhx,
                             DType* dwx,
-							DType* dwh,
-							DType* dbx,
-							DType* dbh) {
+                            DType* dwh,
+                            DType* dbx,
+                            DType* dbh) {
   DType* dyt;
   DType* ht1;//[N, D, H]
   DType* rt;
@@ -721,16 +704,12 @@ void GruBackwardSingleLayer(DType* ws,
           dbx[i] += da[j * 3 * H + i];
           dbh[i] += dar[j * 3 * H + i];
       }				
-  }
-  
+  }  
   alpha = 1.0;
   beta = 0.0;
-
   // dx = da * wx    [T * N, I] = [T * N,3 * H] * [3 * H, I]
-
   Tensor<cpu, 2, DType> d_da(da, Shape2(T * N, 3 * H));
-  Tensor<cpu, 2, DType> d_dx(dx, Shape2(T * N, I));
-  
+  Tensor<cpu, 2, DType> d_dx(dx, Shape2(T * N, I));  
   linalg_gemm(d_da, wx, d_dx, alpha, beta, false, false);
    
   // dwx = da.T * x    [3 * H, I] = [3 * H, T * N] * [T * N, I]
@@ -759,15 +738,12 @@ void GruBackward(DType* ws,
                  DType* dx_ptr,
                  DType* dhx_ptr,
                  DType* dw_ptr) {
-
     DType* wx = w_ptr;
     DType* wh = wx + I * H * 3 * D;	
-
     DType* dwx = dw_ptr;
     DType* dwh = dwx + I * H * 3 * D;
     DType* dbx = dwh + H * H * 3 * D;
     DType* dbh = dbx + H * 3 * D;
-
     DType* gateR_l = ws + (L - 1) * T * D * N * H;
     DType* gateZ_l = gateR_l + L * T * D * N * H;
     DType* gateN_l = gateZ_l + L * T * D * N * H;
@@ -776,7 +752,6 @@ void GruBackward(DType* ws,
     DType* ws2 = Mnh_l + T * N * H * D;
     DType* wx_l_ptr = (L == 1)? wx : wx + (L - 2) * D * (D * H) * 3 * H + D * I * 3 * H;
     DType* wh_l_ptr = wh + (L - 1) * D * H * 3 * H;
-
     DType* x_l_ptr = x_ptr;
     DType* hx_l_ptr = hx_ptr + (L - 1) * D * N * H;
     DType* dhy_l = dhy_ptr + (L - 1) * D * N * H;
@@ -784,13 +759,11 @@ void GruBackward(DType* ws,
     DType* dwh_l = dwh + (L - 1) * D * H * 3 * H;
     DType* dbx_l = dbx + (L - 1) * D * 3 * H;
     DType* dbh_l = dbh + (L - 1) * D * 3 * H;
-    DType* dx_l = (L == 1)? dx_ptr : dx_ptr;
+    DType* dx_l = dx_ptr;
     DType* dhx_l = dhx_ptr + (L - 1) * D * N * H;
     DType* dy_l = dy_ptr;
-
-	const Tensor<cpu, 2, DType> wx_l(wx_l_ptr, Shape2(H * 3, I));
+    const Tensor<cpu, 2, DType> wx_l(wx_l_ptr, Shape2(H * 3, I));
     const Tensor<cpu, 2, DType> wh_l(wh_l_ptr, Shape2(H * 3, H));
-
     Tensor<cpu, 2, DType> x_l(x_l_ptr, Shape2(T * N, I));
     Tensor<cpu, 3, DType> hx(hx_l_ptr, Shape3(L, N, H));
     Tensor<cpu, 2, DType> hx_l = hx[0];

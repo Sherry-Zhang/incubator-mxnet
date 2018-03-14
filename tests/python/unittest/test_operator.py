@@ -106,7 +106,7 @@ def test_gru():
     x.detach()
     x.attach_grad()
 
-    #IntelRNN
+    #sym.RNN
 
     Y = mx.sym.RNN(data=X, parameters=Params, state=HX, 
                    state_size=H, num_layers=nl, bidirectional=bidirection, mode='gru', state_outputs = True, name='GRU')
