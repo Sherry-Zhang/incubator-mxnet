@@ -19,9 +19,9 @@
 
 /*!
  * Copyright (c) 2015 by Contributors
- * \file    rnn.cc
+ * \file rnn.cc
  * \brief
- * \author  Sebastian Bodenstein, Shu Zhang(shu.zhang@intel.com)
+ * \author Sebastian Bodenstein, Shu Zhang(shu.zhang@intel.com)
 */
 #include "./rnn-inl.h"
 
@@ -37,10 +37,10 @@ static inline std::vector<std::string> ListArguments(const RNNParam& param_) {
   }
 }
 static inline int NumVisibleOutputs(const NodeAttrs& attrs) {
-    const RNNParam& params = nnvm::get<RNNParam>(attrs.parsed);
-    int mode_num = (params.mode == rnn_enum::kLstm) ? 2 : 1;
-    int num_outputs = params.state_outputs ? (mode_num + 1) : 1;
-    return num_outputs;
+  const RNNParam& params = nnvm::get<RNNParam>(attrs.parsed);
+  int mode_num = (params.mode == rnn_enum::kLstm) ? 2 : 1;
+  int num_outputs = params.state_outputs ? (mode_num + 1) : 1;
+  return num_outputs;
 }
 static bool RNNShape(const nnvm::NodeAttrs& attrs,
                      std::vector<TShape> *in_shape,
@@ -130,20 +130,20 @@ static bool RNNType(const nnvm::NodeAttrs& attrs,
 }
 
 inline static bool RNNStorageType(const nnvm::NodeAttrs& attrs,
-                                   const int dev_mask,
-                                   DispatchMode* dispatch_mode,
-                                   std::vector<int> *in_attrs,
-                                   std::vector<int> *out_attrs) {
+                                  const int dev_mask,
+                                  DispatchMode* dispatch_mode,
+                                  std::vector<int> *in_attrs,
+                                  std::vector<int> *out_attrs) {
   DispatchMode wanted_mode = DispatchMode::kFCompute;
   return storage_type_assign(out_attrs, mxnet::kDefaultStorage,
                              dispatch_mode, wanted_mode);
 }
 
 inline static bool BackwardRNNStorageType(const nnvm::NodeAttrs& attrs,
-                                   const int dev_mask,
-                                   DispatchMode* dispatch_mode,
-                                   std::vector<int> *in_attrs,
-                                   std::vector<int> *out_attrs) {
+                                          const int dev_mask,
+                                          DispatchMode* dispatch_mode,
+                                          std::vector<int> *in_attrs,
+                                          std::vector<int> *out_attrs) {
   DispatchMode wanted_mode = DispatchMode::kFCompute;
   return storage_type_assign(out_attrs, mxnet::kDefaultStorage,
                              dispatch_mode, wanted_mode);
@@ -182,13 +182,10 @@ NNVM_REGISTER_OP(RNN)
 .describe(R"code(Applies a recurrent layer to input
 )code" ADD_FILELINE)
 .set_attr_parser(ParamParser<RNNParam>)
+.set_num_inputs(4)
 .set_num_inputs([](const NodeAttrs& attrs) {
     const RNNParam& params = nnvm::get<RNNParam>(attrs.parsed);
-    int num_inputs = 3;
-    if (params.mode == rnn_enum::kLstm) {
-      num_inputs = 4;
-    }    
-    return num_inputs; 
+    return params.mode == rnn_enum::kLstm ? 4 : 3;
 })
 .set_num_outputs([](const NodeAttrs& attrs) {
     return NumVisibleOutputs(attrs) + 1;
@@ -221,11 +218,7 @@ NNVM_REGISTER_OP(RNN)
 NNVM_REGISTER_OP(_backward_RNN)
 .set_num_outputs([](const NodeAttrs& attrs) {
     const RNNParam& params = nnvm::get<RNNParam>(attrs.parsed);
-    int num_outputs = 3;
-    if (params.mode == rnn_enum::kLstm) {
-      num_outputs = 4;
-    }    
-    return num_outputs; 
+    return params.mode == rnn_enum::kLstm ? 4 : 3;
 })
 .set_attr_parser(ParamParser<RNNParam>)
 .set_attr<nnvm::TIsBackward>("TIsBackward", true)

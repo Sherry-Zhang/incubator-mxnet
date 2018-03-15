@@ -42,7 +42,7 @@
 
 template<typename DType>
 inline DType sigmoid(DType x) {
-    return 1.0f / (1.0f + exp(-x));
+  return 1.0f / (1.0f + exp(-x));
 }
 
 template<typename DType>
@@ -343,39 +343,38 @@ void GruForwardInferenceSingleLayer(DType* ws,
       }
 
   DType* ht = y_ptr;
-  DType* ht_1 = y_ptr;  
-  DType* gemmC1  = ws;              // [D, T, N, 3 * H]                
-  DType* gemmC2  = gemmC1 + D * T * N * 3 * H;  // N * 3 * H  
+  DType* ht_1 = y_ptr;
+  DType* gemmC1  = ws;              // [D, T, N, 3 * H]
+  DType* gemmC2  = gemmC1 + D * T * N * 3 * H;  // N * 3 * H
   DType* rt = gemmC2 + N * 3 * H;
   DType* zt = rt + N * H;
-  DType* nt = zt + N * H;  
-  DType* gemmC1_t = gemmC1;  
+  DType* nt = zt + N * H;
+  DType* gemmC1_t = gemmC1;
   Tensor<cpu, 2, DType> dgemmC1(ws, Shape2(D * T * N, 3 * H));
   Tensor<cpu, 2, DType> dgemmC2(gemmC2, Shape2(D * N, 3 * H));
 
-  //x * wx.T : [T * N, I] * [I, 3 * H]  
+  // x * wx.T : [T * N, I] * [I, 3 * H]
   DType alpha = 1.0;
-  DType beta = 0.0;  
+  DType beta = 0.0;
   linalg_gemm(x, wx, dgemmC1, alpha, beta, false, true);
 
   for (int t = 0; t < T; t++) {
       //  perform the first direction, X * wx and H * wh for each step
-      //  ht-1 * wh, ht-1:[N, H] wh:[3 * H, H]      
-	  Tensor<cpu, 2, DType> dht_1(ht_1, Shape2(N, D * H)); 
+      //  ht-1 * wh, ht-1:[N, H] wh:[3 * H, H]
+      Tensor<cpu, 2, DType> dht_1(ht_1, Shape2(N, D * H));
       linalg_gemm(dht_1, wh, dgemmC2, alpha, beta, false, true);
       gemmC1_t = gemmC1 + t * N * 3 * H;
-        
       #pragma omp parallel for collapse(2)
       for (int i = 0; i < N; ++i) {
-          for (int j = 0; j < H; ++j) {                
+          for (int j = 0; j < H; ++j) {
               int rtb = i * 3 * H;
               int ztb = i * 3 * H + H;
-              int ntb = i * 3 * H + 2 * H;			  
+              int ntb = i * 3 * H + 2 * H;
               rt[i * H + j] = sigmoid(gemmC1_t[rtb + j] + gemmC2[rtb + j]
                   + bx[0][j] + bh[0][j]);
               zt[i * H + j] = sigmoid(gemmC1_t[ztb + j] + gemmC2[ztb + j]
-                  + bx[1][j] + bh[1][j]);             
-			  nt[i * H + j] = tanh(gemmC1_t[ntb + j] + bx[2][j] +
+                  + bx[1][j] + bh[1][j]);
+              nt[i * H + j] = tanh(gemmC1_t[ntb + j] + bx[2][j] +
                   rt[i * H + j] * (gemmC2[ntb + j] + bh[2][j]));
               ht[i * D * H + j] = (1-zt[i * H + j]) * nt[i * H + j] +
                     zt[i * H + j] * ht_1[i * D * H + j];
@@ -383,16 +382,15 @@ void GruForwardInferenceSingleLayer(DType* ws,
       }
       ht_1 = ht;
       ht = ht + D * H * N;
-  }    
+  }
   //  copy last state to hy, from(N, H * D) to (D, N, H)
   if (state_outputs) {
-        
       DType* y_start = y_ptr + (T - 1) * N * H;
       #pragma omp parallel for collapse(2)
       for (int i = 0; i < N; i++)
           for (int j = 0; j < H; j++) {
               hy_ptr[i * H + j] = y_start[i * H + j];
-          }  
+          }
   }
 }
 
@@ -413,7 +411,7 @@ void GruForwardInference(DType* ws,
   const Tensor<cpu, 2, DType> wx(w_ptr, Shape2(H * 3, I));
   const Tensor<cpu, 2, DType> wh(w_ptr + I * H * 3, Shape2(H * 3, H));
   const Tensor<cpu, 2, DType> bx(wh.dptr_ + H * H * 3, Shape2(3, H));
-  const Tensor<cpu, 2, DType> bh(bx.dptr_ + H * 3, Shape2(3, H));  
+  const Tensor<cpu, 2, DType> bh(bx.dptr_ + H * 3, Shape2(3, H));
 
   DType* y_tmp = ws;
   DType* y_l = x_ptr;
@@ -427,20 +425,18 @@ void GruForwardInference(DType* ws,
   Tensor<cpu, 3, DType> hx(hx_ptr, Shape3(L, N, H));
   Tensor<cpu, 3, DType> hy(hy_ptr, Shape3(L, N, H));
   Tensor<cpu, 2, DType> x_l = x;
-  Tensor<cpu, 2, DType> hx_l = hx[0];    
-  DType* hy_l = hy_ptr;  
-  
+  Tensor<cpu, 2, DType> hx_l = hx[0];
+  DType* hy_l = hy_ptr;
+
   for (int i = 0; i < T * N; i++)
       for (int j = 0; j < I; j++) {
-	      x_l[i][j] = y_l[i * I + j];
+              x_l[i][j] = y_l[i * I + j];
       }
 
   y_l = y_ptr;
 
   GruForwardInferenceSingleLayer<DType>(ws2, state_outputs, D, T, N, I, H,
                                          x_l, hx_l, wx_l, wh_l, bx_l, bh_l, y_l, hy_l);
-
- 
 }
 
 
@@ -463,74 +459,71 @@ void GruForwardTrainingSingleLayer(DType* ws,
                                    DType* gateN,
                                    DType* Mnh,
                                    DType* y_ptr,
-                                   DType* hy_ptr) {   
-
+                                   DType* hy_ptr) {
   DType* ht = y_ptr;
-  DType* ht_1 = y_ptr; 
-  DType* gemmC1  = ws;              // [D, T, N, 3 * H]                
-  DType* gemmC2  = gemmC1 + D * T * N * 3 * H;  // N * 3 * H  
+  DType* ht_1 = y_ptr;
+  DType* gemmC1  = ws;              // [D, T, N, 3 * H]
+  DType* gemmC2  = gemmC1 + D * T * N * 3 * H;  // N * 3 * H
   DType* rt = gateR;
   DType* zt = gateZ;
-  DType* nt = gateN;  
-  DType* gemmC1_t = gemmC1;  
+  DType* nt = gateN;
+  DType* gemmC1_t = gemmC1;
   Tensor<cpu, 2, DType> dgemmC1(ws, Shape2(D * T * N, 3 * H));
   Tensor<cpu, 2, DType> dgemmC2(gemmC2, Shape2(D * N, 3 * H));
-    
+
   #pragma omp parallel for collapse(2)
   for (int i = 0; i < N; i++)
       for (int j = 0; j < H; j++) {
           y_ptr[i * H + j] = hx[i][j];
       }
 
-  //x * wx.T : [T * N, I] * [I, 3 * H]  
+  // x * wx.T : [T * N, I] * [I, 3 * H]
   DType alpha = 1.0;
-  DType beta = 0.0;  
+  DType beta = 0.0;
   linalg_gemm(x, wx, dgemmC1, alpha, beta, false, true);
-    
+
   for (int t = 0; t < T; t++) {
       //  perform the first direction, X * wx and H * wh for each step
       //  ht-1 * wh, ht-1:[N, H] wh:[3 * H, H]
-      
-	  Tensor<cpu, 2, DType> dht_1(ht_1, Shape2(N, D * H)); 
+
+      Tensor<cpu, 2, DType> dht_1(ht_1, Shape2(N, D * H));
       linalg_gemm(dht_1, wh, dgemmC2, alpha, beta, false, true);
       gemmC1_t = gemmC1 + t * N * 3 * H;
-               
+
       rt = gateR + t * N * H;
       zt = gateZ + t * N * H;
       nt = gateN + t * N * H;
       gemmC1_t = gemmC1 + t * N * 3 * H;
-	  DType* Mnht = Mnh + t * N * H;
-        
+      DType* Mnht = Mnh + t * N * H;
       #pragma omp parallel for collapse(2)
       for (int i = 0; i < N; ++i) {
-          for (int j = 0; j < H; ++j) {                
+          for (int j = 0; j < H; ++j) {
               int rtb = i * 3 * H;
               int ztb = i * 3 * H + H;
-              int ntb = i * 3 * H + 2 * H;   
-			  Mnht[i * H + j] = gemmC2[ntb + j] + bh[2][j];
-			  rt[i * H + j] = sigmoid(gemmC1_t[rtb + j] + gemmC2[rtb + j]
+              int ntb = i * 3 * H + 2 * H;
+              Mnht[i * H + j] = gemmC2[ntb + j] + bh[2][j];
+              rt[i * H + j] = sigmoid(gemmC1_t[rtb + j] + gemmC2[rtb + j]
                   + bx[0][j] + bh[0][j]);
               zt[i * H + j] = sigmoid(gemmC1_t[ztb + j] + gemmC2[ztb + j]
-                  + bx[1][j] + bh[1][j]);             
-			  nt[i * H + j] = tanh(gemmC1_t[ntb + j] + bx[2][j] +
+                  + bx[1][j] + bh[1][j]);
+              nt[i * H + j] = tanh(gemmC1_t[ntb + j] + bx[2][j] +
                   rt[i * H + j] * (gemmC2[ntb + j] + bh[2][j]));
               ht[i * D * H + j] = (1-zt[i * H + j]) * nt[i * H + j] +
                     zt[i * H + j] * ht_1[i * D * H + j];
             }
-        }        
+        }
       ht_1 = ht;
       ht = ht + D * H * N;
   }
   //  copy last state to hy, from(N, H * D) to (D, N, H)
-  if (state_outputs) {        
+  if (state_outputs) {
       DType* y_start = y_ptr + (T - 1) * N * H;
       #pragma omp parallel for collapse(2)
       for (int i = 0; i < N; i++)
           for (int j = 0; j < H; j++) {
               hy_ptr[i * H + j] = y_start[i * H + j];
-          }  
+          }
   }
-    
 }
 
 template <typename DType>
@@ -547,11 +540,10 @@ void GruForwardTraining(DType* ws,
                         DType* w_ptr,
                         DType* y_ptr,
                         DType* hy_ptr) {
-
   const Tensor<cpu, 2, DType> wx(w_ptr, Shape2(H * 3, I));
   const Tensor<cpu, 2, DType> wh(w_ptr + I * H * 3, Shape2(H * 3, H));
   const Tensor<cpu, 2, DType> bx(wh.dptr_ + H * H * 3, Shape2(3, H));
-  const Tensor<cpu, 2, DType> bh(bx.dptr_ + H * 3, Shape2(3, H));  
+  const Tensor<cpu, 2, DType> bh(bx.dptr_ + H * 3, Shape2(3, H));
   Tensor<cpu, 2, DType> x(x_ptr, Shape2(T * N, I));
   Tensor<cpu, 3, DType> hx(hx_ptr, Shape3(L, N, H));
   Tensor<cpu, 3, DType> hy(hy_ptr, Shape3(L, N, H));
@@ -567,16 +559,16 @@ void GruForwardTraining(DType* ws,
   const Tensor<cpu, 2, DType> wx_l = wx;
   const Tensor<cpu, 2, DType> wh_l = wh;
   const Tensor<cpu, 2, DType> bx_l = bx;
-  const Tensor<cpu, 2, DType> bh_l = bh;  
+  const Tensor<cpu, 2, DType> bh_l = bh;
 
-  GruForwardTrainingSingleLayer<DType>(ws2, state_outputs, D, T, N, I, H, x_l, hx_l, wx_l, wh_l, bx_l, 
-	  bh_l, gateR_l, gateZ_l, gateN_l, Mnh_l, y_l, hy_l);
+  GruForwardTrainingSingleLayer<DType>(ws2, state_outputs, D, T, N, I, H,
+                                       x_l, hx_l, wx_l, wh_l, bx_l, bh_l,
+                                       gateR_l, gateZ_l, gateN_l, Mnh_l, y_l, hy_l);
 
-  #pragma omp parallel for 
-  for (int i = 0; i < T * N * H * D; i++){
+  #pragma omp parallel for
+  for (int i = 0; i < T * N * H * D; i++) {
       y_ptr[i] = y_l[i];
-  }    
-  
+  }
 }
 
 template <typename DType>
@@ -591,12 +583,12 @@ void GruBackwardSingleLayer(DType* ws,
                             const Tensor<cpu, 2, DType> &wx,
                             const Tensor<cpu, 2, DType> &wh,
                             DType* y_ptr,
-                            DType* dy_ptr,  
+                            DType* dy_ptr,
                             DType* dhy_ptr,
-                            DType* gateR, 
-                            DType* gateZ, 
-                            DType* gateN, 
-                            DType* Mnh,                            
+                            DType* gateR,
+                            DType* gateZ,
+                            DType* gateN,
+                            DType* Mnh,
                             DType* dx,
                             DType* dhx,
                             DType* dwx,
@@ -604,57 +596,56 @@ void GruBackwardSingleLayer(DType* ws,
                             DType* dbx,
                             DType* dbh) {
   DType* dyt;
-  DType* ht1;//[N, D, H]
+  DType* ht1;  // [N, D, H]
   DType* rt;
   DType* zt;
   DType* nt;
   DType* dat;
   DType* dart;
-  DType* dar = ws; //[T, N, 3 * H]
-  DType* da = dar + T * N * 3 * H; //[T, N, 3 * H]
-  DType* dht1 = da + T * N * 3 * H;  //[D, N, H]
-  DType* hx_ = dht1 + D * N * H; //[N, D, H] 
+  DType* dar = ws;  // [T, N, 3 * H]
+  DType* da = dar + T * N * 3 * H;  // [T, N, 3 * H]
+  DType* dht1 = da + T * N * 3 * H;  // [D, N, H]
+  DType* hx_ = dht1 + D * N * H;  // [N, D, H]
   DType* Mnht = Mnh;
   int i, j, t;
   DType alpha = 1.0;
-  DType beta = 0.0;  
+  DType beta = 0.0;
 
   #pragma omp parallel for
-  for(i = 0; i < D * H * 3 * H; ++i){
-      dwh[i]=0;
+  for (i = 0; i < D * H * 3 * H; ++i) {
+      dwh[i] = 0;
   }
-    
+
   #pragma omp parallel for
-  for(i = 0; i < D * 3 * H; ++i){
+  for (i = 0; i < D * 3 * H; ++i) {
       dbx[i] = 0;
       dbh[i] = 0;
   }
 
   #pragma omp parallel for
-  for(i = 0; i < N * H; ++i){
+  for (i = 0; i < N * H; ++i) {
       dht1[i] = dhy_ptr[i];
   }
 
   #pragma omp parallel for collapse(2)
-  for(i = 0; i < N; ++i){
-      for(j = 0; j < H; ++j){
+  for (i = 0; i < N; ++i) {
+      for (j = 0; j < H; ++j) {
           hx_[i * D * H + j] = hx[i][j];
       }
   }
-   
-  for(t = T - 1; t >= 0; --t){
-      if(t){
+
+  for (t = T - 1; t >= 0; --t) {
+      if (t) {
           ht1 = y_ptr + (t - 1) * N * D * H;
-      }
-      else{
+      } else {
           ht1 = hx_;
       }
-       
-      //add dy[T, N, D, H] to dhy[D, N, H]
+
+      // add dy[T, N, D, H] to dhy[D, N, H]
       dyt = dy_ptr + t * N * D * H;
       #pragma omp parallel for collapse(2)
-      for(i = 0; i < N; ++i){
-          for(j = 0; j < H; ++j){
+      for (i = 0; i < N; ++i) {
+          for (j = 0; j < H; ++j) {
               dht1[i * H + j] += dyt[i * D * H + j];
           }
       }
@@ -665,61 +656,61 @@ void GruBackwardSingleLayer(DType* ws,
       Mnht = Mnh +  t * N * H;
       dat = da + t * N * 3 * H;
       dart = dar + t * N * 3 * H;
-      
+
       #pragma omp parallel for collapse(2)
-      for( i = 0; i < N; ++i){
-          for( j = 0; j < H; ++j){
+      for (i = 0; i < N; ++i) {
+          for (j = 0; j < H; ++j) {
               int nid = i * 3 * H + 2 * H + j;
               int zid = i * 3 * H + H + j;
               int rid = i * 3 * H + j;
               int id = i * H + j;
               dat[nid] = dht1[id] * (1 - zt[id]) * (1 - nt[id] * nt[id]);
-              dart[zid] = dat[zid] = dht1[id] * (ht1[i * D * H + j] - nt[id]) * 
+              dart[zid] = dat[zid] = dht1[id] * (ht1[i * D * H + j] - nt[id]) *
                 zt[id] * (1 - zt[id]);
-              dart[rid] = dat[rid] = dat[nid] * Mnht[id] * rt[id] * 
+              dart[rid] = dat[rid] = dat[nid] * Mnht[id] * rt[id] *
                 (1 - rt[id]);
               dart[nid] = dat[nid] * rt[id];
-              dht1[id] = dht1[id] * zt[id];			  
+              dht1[id] = dht1[id] * zt[id];
           }
       }
-      
-	  alpha = 1.0;
-	  beta = 1.0;
+
+      alpha = 1.0;
+      beta = 1.0;
 
       // dht1 = dart * wh    [N, H] = [N, 3 * H] * [3 * H, H]
       Tensor<cpu, 2, DType> d_dht1(dht1, Shape2(N, H));
-	  Tensor<cpu, 2, DType> d_dart(dart, Shape2(N, 3 * H));	  
-	  linalg_gemm(d_dart, wh, d_dht1, alpha, beta, false, false);
+      Tensor<cpu, 2, DType> d_dart(dart, Shape2(N, 3 * H));
+      linalg_gemm(d_dart, wh, d_dht1, alpha, beta, false, false);
 
       // dwh = dart.T * ht1    [3 * H, H] = [3 * H, N] * [N, H]
-	  Tensor<cpu, 2, DType> d_ht1(ht1, Shape2(N, H));
-	  Tensor<cpu, 2, DType> d_dwh(dwh, Shape2(3 * H, H));
-	  linalg_gemm(d_dart, d_ht1, d_dwh, alpha, beta, true, false);
+      Tensor<cpu, 2, DType> d_ht1(ht1, Shape2(N, H));
+      Tensor<cpu, 2, DType> d_dwh(dwh, Shape2(3 * H, H));
+      linalg_gemm(d_dart, d_ht1, d_dwh, alpha, beta, true, false);
   }
-   
+
   // dbx = e * da       [1, 3 * H] = [1, N] * [N, 3 * H]
   #pragma omp parallel for
-  for(i = 0; i < 3 * H; ++i){
-      for(j = 0; j < N * T; ++j){
+  for (i = 0; i < 3 * H; ++i) {
+      for (j = 0; j < N * T; ++j) {
           dbx[i] += da[j * 3 * H + i];
           dbh[i] += dar[j * 3 * H + i];
-      }				
-  }  
+      }
+  }
   alpha = 1.0;
   beta = 0.0;
   // dx = da * wx    [T * N, I] = [T * N,3 * H] * [3 * H, I]
   Tensor<cpu, 2, DType> d_da(da, Shape2(T * N, 3 * H));
-  Tensor<cpu, 2, DType> d_dx(dx, Shape2(T * N, I));  
+  Tensor<cpu, 2, DType> d_dx(dx, Shape2(T * N, I));
   linalg_gemm(d_da, wx, d_dx, alpha, beta, false, false);
-   
+
   // dwx = da.T * x    [3 * H, I] = [3 * H, T * N] * [T * N, I]
   Tensor<cpu, 2, DType> d_dwx(dwx, Shape2(3 * H, I));
   linalg_gemm(d_da, x, d_dwx, alpha, beta, true, false);
-  
+
   #pragma omp parallel for
-  for(i = 0; i < D * N * H; ++i){
+  for (i = 0; i < D * N * H; ++i) {
       dhx[i] = dht1[i];
-  } 
+  }
 }
 
 template <typename DType>
@@ -734,12 +725,12 @@ void GruBackward(DType* ws,
                  DType* hx_ptr,
                  DType* w_ptr,
                  DType* dy_ptr,
-                 DType* dhy_ptr,				 
+                 DType* dhy_ptr,
                  DType* dx_ptr,
                  DType* dhx_ptr,
                  DType* dw_ptr) {
     DType* wx = w_ptr;
-    DType* wh = wx + I * H * 3 * D;	
+    DType* wh = wx + I * H * 3 * D;
     DType* dwx = dw_ptr;
     DType* dwh = dwx + I * H * 3 * D;
     DType* dbx = dwh + H * H * 3 * D;
@@ -768,9 +759,8 @@ void GruBackward(DType* ws,
     Tensor<cpu, 3, DType> hx(hx_l_ptr, Shape3(L, N, H));
     Tensor<cpu, 2, DType> hx_l = hx[0];
 
-    GruBackwardSingleLayer<DType>(ws2, D, T, N, I, H, x_l, hx_l, wx_l, wh_l, y_l, dy_l, 
-                                 dhy_l, gateR_l, gateZ_l, gateN_l, Mnh_l, dx_l, dhx_l, dwx_l, dwh_l, dbx_l, dbh_l);
-  
+    GruBackwardSingleLayer<DType>(ws2, D, T, N, I, H, x_l, hx_l, wx_l, wh_l, y_l, dy_l,
+                                  dhy_l, gateR_l, gateZ_l, gateN_l, Mnh_l, dx_l, dhx_l,
+                                  dwx_l, dwh_l, dbx_l, dbh_l);
 }
-
 #endif  // MXNET_OPERATOR_RNN_IMPL_HPP_

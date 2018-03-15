@@ -35,6 +35,8 @@
 #include <vector>
 #include <string>
 #include <utility>
+#include "./math.h"
+#include "./math_functions-inl.h"
 #include "./operator_common.h"
 #include "./rnn_impl.hpp"
 
@@ -95,14 +97,19 @@ inline size_t GetRNNWorkspaceSize(int seq_length,
   size_t size = 0;
   switch (mode) {
     case rnn_enum::kRnnRelu:
+      LOG(FATAL) << "Only GRU/LSTM is supported at the moment";
       break;
     case rnn_enum::kRnnTanh:
+      LOG(FATAL) << "Only GRU/LSTM is supported at the moment";
       break;
     case rnn_enum::kLstm:
       size = (seq_length + 1) * batch_size * hidden_size * 4 + batch_size * hidden_size;
       break;
     case rnn_enum::kGru:
-	  size = seq_length * batch_size * hidden_size * 4 + batch_size * hidden_size * 6;
+      size = seq_length * batch_size * hidden_size * 4 + batch_size * hidden_size * 6;
+      break;
+    default:
+      LOG(FATAL) << "unknown RNN mode " << mode;
       break;
   }
   return size;
@@ -115,15 +122,20 @@ inline size_t GetRNNReserveSpaceSize(int seq_length,
   size_t size = 0;
   switch (mode) {
     case rnn_enum::kRnnRelu:
+      LOG(FATAL) << "Only GRU/LSTM is supported at the moment";
       break;
     case rnn_enum::kRnnTanh:
+      LOG(FATAL) << "Only GRU/LSTM is supported at the moment";
       break;
     case rnn_enum::kLstm:
       size = seq_length * batch_size * hidden_size * 6;
       break;
     case rnn_enum::kGru:
-	  size = seq_length * batch_size * hidden_size * 5 + 
-		batch_size * hidden_size * 7 + 2 * seq_length * batch_size * 3 * hidden_size;
+      size = seq_length * batch_size * hidden_size * 5 + batch_size * hidden_size * 7 +
+        2 * seq_length * batch_size * 3 * hidden_size;
+      break;
+    default:
+      LOG(FATAL) << "unknown RNN mode " << mode;
       break;
   }
   return size;
@@ -164,6 +176,30 @@ struct RNNParam : public dmlc::Parameter<RNNParam> {
   }
 };
 
+/**
+ * @params: ws: Temp workspace for gemm's output storage.
+ *          rs: Reserve space of forward intermediate data used for training.
+ *          num_layers: The number of recurrent layers.
+ *          direction: direction is 2 if use bidirectional recurrent layers, else is 1;
+ *          seq_length: The number of iterations to unroll over.
+ *          batch_size: size of batch.
+ *          input_size: The number of expected input features.
+ *          state_size: The number of hidden state features.
+ *          x_ptr: Pointer of tensor x containing the features of the input sequence.
+ *                 x's shape is [seq_length, batch_size, input_size]
+ *          hx_ptr: Pointer of tensor hx containing the initial hidden state.
+ *                  hx's shape is [num_layers, batch_size, state_size]
+ *          cx_ptr: Only used in lstm mode. pointer of tensor cx containing the initial cell state.
+ *                  cx's shape is [num_layers, batch_size, state_size]
+ *          w_ptr: Pointer of tensor w containing weights and bias.
+ *          y_ptr: Pointer of tensor y containing the features of the output features from the
+ *                 last layers of the RNN. y's shape is [seq_length, batch_size, state_size]
+ *          hy_ptr: Pointer of tensor hy containing the hidden state for t=seq_length.
+ *                  hy's shape is [num_layers, batch_size, state_size]
+ *          cy_ptr: Only used in lstm mode. pointer of tensor cy  containing the cell state
+ *                  for t=seq_length. cy' shape is [num_layers, batch_size, state_size]
+ *          mode: Specifies the type of RNN to compute.
+ */
 template <typename DType>
 void RNNForwardTraining(DType* ws,
                         DType* rs,
@@ -184,8 +220,10 @@ void RNNForwardTraining(DType* ws,
                         int mode) {
   switch (mode) {
     case rnn_enum::kRnnRelu:
+      LOG(FATAL) << "Only GRU/LSTM is supported at the moment";
       break;
     case rnn_enum::kRnnTanh:
+      LOG(FATAL) << "Only GRU/LSTM is supported at the moment";
       break;
     case rnn_enum::kLstm:
       LstmForwardTraining<DType>(ws, rs, state_outputs, num_layers, direction, seq_length,
@@ -193,8 +231,12 @@ void RNNForwardTraining(DType* ws,
                                  w_ptr, y_ptr, hy_ptr, cy_ptr);
       break;
     case rnn_enum::kGru:
-	  GruForwardTraining<DType>(rs, state_outputs, num_layers, direction, seq_length,
-                              batch_size, input_size, state_size, x_ptr, hx_ptr, w_ptr, y_ptr, hy_ptr);
+      GruForwardTraining<DType>(rs, state_outputs, num_layers, direction, seq_length,
+                                batch_size, input_size, state_size, x_ptr, hx_ptr,
+                                w_ptr, y_ptr, hy_ptr);
+      break;
+    default:
+      LOG(FATAL) << "unknown RNN mode " << mode;
       break;
   }
 }
@@ -218,8 +260,10 @@ void RNNForwardInference(DType* ws,
                          int mode) {
   switch (mode) {
     case rnn_enum::kRnnRelu:
+      LOG(FATAL) << "Only GRU/LSTM is supported at the moment";
       break;
     case rnn_enum::kRnnTanh:
+      LOG(FATAL) << "Only GRU/LSTM is supported at the moment";
       break;
     case rnn_enum::kLstm:
       LstmForwardInference<DType>(ws, state_outputs, num_layers, direction, seq_length,
@@ -227,8 +271,12 @@ void RNNForwardInference(DType* ws,
                                   w_ptr, y_ptr, hy_ptr, cy_ptr);
       break;
     case rnn_enum::kGru:
-	  GruForwardInference<DType>(ws, state_outputs, num_layers, direction, seq_length,
-                              batch_size, input_size, state_size, x_ptr, hx_ptr, w_ptr, y_ptr, hy_ptr);
+      GruForwardInference<DType>(ws, state_outputs, num_layers, direction, seq_length,
+                                 batch_size, input_size, state_size, x_ptr, hx_ptr,
+                                 w_ptr, y_ptr, hy_ptr);
+      break;
+    default:
+      LOG(FATAL) << "unknown RNN mode " << mode;
       break;
   }
 }
@@ -266,13 +314,13 @@ void RNNBackward(DType* ws,
                           dy_ptr, dhy_ptr, dcy_ptr, dx_ptr, dhx_ptr, dcx_ptr, dw_ptr);
       break;
     case rnn_enum::kGru:
-	  GruBackward<DType>(rs, num_layers, direction, seq_length, batch_size,
-                          input_size, state_size, x_ptr, hx_ptr, w_ptr,
-                          dy_ptr, dhy_ptr, dx_ptr, dhx_ptr, dw_ptr);
-
+      GruBackward<DType>(rs, num_layers, direction, seq_length, batch_size,
+                         input_size, state_size, x_ptr, hx_ptr, w_ptr,
+                         dy_ptr, dhy_ptr, dx_ptr, dhx_ptr, dw_ptr);
       break;
   }
 }
+
 template<typename DType>
 class RNNOp {
  public:
@@ -286,10 +334,10 @@ class RNNOp {
                const std::vector<TBlob> &out_data) {
     using namespace mshadow;
     using namespace mshadow::expr;
-    CHECK(param_.mode == rnn_enum::kLstm || param_.mode == rnn_enum::kGru) 
-		<< "Only lstm/gru mode is supported at the moment.";
+    CHECK(param_.mode == rnn_enum::kLstm || param_.mode == rnn_enum::kGru)
+      << "Only lstm/gru mode is supported at the moment.";
     if (param_.bidirectional || param_.num_layers != 1) {
-      LOG(FATAL) << "Only single layer and undirectional is supported at the moment";
+      LOG(FATAL) << "Only single layer and unidirectional is supported at the moment";
     }
 
     size_t in_expected = (param_.mode == rnn_enum::kLstm) ? 4 : 3;
@@ -334,8 +382,8 @@ class RNNOp {
         .get_space_typed<cpu, 1, DType>(Shape1(workspace_size), s);
     int direction = param_.bidirectional ? 2 : 1;
 
-    if (ctx.is_train) {	  
-      DType* reserve_space_ptr = out_data[out_expected - 1].dptr<DType>();	  
+    if (ctx.is_train) {
+      DType* reserve_space_ptr = out_data[out_expected - 1].dptr<DType>();
       RNNForwardTraining<DType>(workspace.dptr_,
                                 reserve_space_ptr,
                                 param_.state_outputs,
@@ -353,7 +401,6 @@ class RNNOp {
                                 hy_ptr,
                                 cy_ptr,
                                 param_.mode);
-		
     } else {
       RNNForwardInference<DType>(workspace.dptr_,
                                  param_.state_outputs,
@@ -382,10 +429,10 @@ class RNNOp {
                 const std::vector<TBlob> &in_grad) {
     using namespace mshadow;
     using namespace mshadow::expr;
-    CHECK(param_.mode == rnn_enum::kLstm || param_.mode == rnn_enum::kGru) 
-		<< "Only lstm/gru mode is supported at the moment.";
+    CHECK(param_.mode == rnn_enum::kLstm || param_.mode == rnn_enum::kGru)
+      << "Only lstm/gru mode is supported at the moment.";
     if (param_.bidirectional || param_.num_layers != 1) {
-      LOG(FATAL) << "Only single layer and undirectional is supported at the moment";
+      LOG(FATAL) << "Only single layer and unidirectional is supported at the moment";
     }
     size_t in_expected = (param_.mode == rnn_enum::kLstm) ? 4 : 3;
     size_t out_expected = (param_.mode == rnn_enum::kLstm) ? 3 : 2;
